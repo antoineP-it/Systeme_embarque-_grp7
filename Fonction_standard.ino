@@ -5,14 +5,12 @@
 #define adresseI2CBME 0x76
 
 
-
 RTC_DS1307 rtc;
 Adafruit_BME280 bme;
 
 const int pinData = 3;
 const int pinClock = 4;
 ChainableLED leds(pinData, pinClock, 1);
-
 
 
 void setup() {
@@ -45,6 +43,23 @@ void lire_temperature(float* temp, float* humi, float* press, float* alt){
   *press = bme.readPressure() / 100.0F;
   *alt = bme.readAltitude(1029);
   Serial.println(*temp);
+
+  // Affichage pour le débogage
+  Serial.print("Température: ");
+  Serial.print(*temp);
+  Serial.println(" °C");
+
+  Serial.print("Humidité: ");
+  Serial.print(*humi);
+  Serial.println(" %");
+
+  Serial.print("Pression: ");
+  Serial.print(*press);
+  Serial.println(" hPa");
+
+  Serial.print("Altitude: ");
+  Serial.print(*alt);
+  Serial.println(" m");
 }
 
 // Fonction qui lit l'heure et la date et les place dans un tableau de caractères
