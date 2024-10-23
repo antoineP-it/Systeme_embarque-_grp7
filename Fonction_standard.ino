@@ -17,7 +17,8 @@ void setup() {
   }
   if (!rtc.isrunning()) {
     // Ajuster l'horloge RTC à l'heure de compilation (ou ajustement manuel)
-    rtc.adjust(DateTime(2024, 10, 23, 14, 30, 0));  // Ajuster avec la date et heure actuelle
+    rtc.adjust(DateTime(2024, 10, 23, 14, 30, 0));// Ajuster avec la date et heure actuelle
+    //rtc.adjust(DateTime(F(__DATE__),F(__TIME__)));
   }
 }
 
