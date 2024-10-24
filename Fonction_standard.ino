@@ -3,6 +3,7 @@
 #include <Adafruit_BME280.h>
 
 #define adresseI2CBME 0x76
+int lightsensor = A1;
 
 
 RTC_DS1307 rtc;
@@ -36,30 +37,17 @@ void setup() {
 
 }
 
+void lumiere(int* raw_light, int* light){
+  *raw_light = analogRead(lightsensor);
+  *light = map(*raw_light, 0, 757, 0, 1023);
+  //*light = *raw_light;
+}
 
 void lire_temperature(float* temp, float* humi, float* press, float* alt){
   *temp = bme.readTemperature();
   *humi = bme.readHumidity();
   *press = bme.readPressure() / 100.0F;
   *alt = bme.readAltitude(1029);
-  Serial.println(*temp);
-
-  // Affichage pour le débogage
-  Serial.print("Température: ");
-  Serial.print(*temp);
-  Serial.println(" °C");
-
-  Serial.print("Humidité: ");
-  Serial.print(*humi);
-  Serial.println(" %");
-
-  Serial.print("Pression: ");
-  Serial.print(*press);
-  Serial.println(" hPa");
-
-  Serial.print("Altitude: ");
-  Serial.print(*alt);
-  Serial.println(" m");
 }
 
 // Fonction qui lit l'heure et la date et les place dans un tableau de caractères
@@ -83,7 +71,30 @@ void standard() {
   float pressure;
   float altitude;
   lire_temperature(&temperature, &humidity, &pressure, &altitude);
-}
+
+  // Affichage pour le débogage
+  Serial.print("Température: ");
+  Serial.print(temperature);
+  Serial.println(" °C");
+
+  Serial.print("Humidité: ");
+  Serial.print(humidity);
+  Serial.println(" %");
+
+  Serial.print("Pression: ");
+  Serial.print(pressure);
+  Serial.println(" hPa");
+
+  Serial.print("Altitude: ");
+  Serial.print(altitude);
+  Serial.println(" m");
+
+  int raw_light;
+  int light;
+  lumiere(&raw_light, &light);
+  Serial.println("Light : /1023");
+  Serial.println(light);
+  }
 
 void loop() {
   standard();
