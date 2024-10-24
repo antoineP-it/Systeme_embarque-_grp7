@@ -92,8 +92,9 @@ void standard() {
   int raw_light;
   int light;
   lumiere(&raw_light, &light);
-  Serial.println("Light : /1023");
-  Serial.println(light);
+  Serial.println("Light :");
+  Serial.print(light);
+  Serial.println(" /1023");
   }
 
 void loop() {
