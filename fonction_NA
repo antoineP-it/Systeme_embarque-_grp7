@@ -1,30 +1,30 @@
 void erreurNA(float* temp, float* humi, float* press, float* alt, float* lumi) {
     int compteur = 0
-    while(temp == NULL && compteur < 2){
+    while(*temp == NULL && compteur < 2){
         temps = millis();
         if (temps > timeout){
             dataFile.println("Température : NA");
         }    
     }
-    while(humi == NULL && compteur < 2){
+    while(*humi == NULL && compteur < 2){
         temps = millis();
         if (temps > timeout){
             dataFile.println("Humidité : NA");
         }    
     }
-    while(alt == NULL && compteur < 2){
+    while(*alt == NULL && compteur < 2){
         temps = millis();
         if (temps > timeout){
             dataFile.println("Altitude : NA");
         }    
     }
-    while(press == NULL && compteur < 2){
+    while(*press == NULL && compteur < 2){
         temps = millis();
         if (temps > timeout){
             dataFile.println("Pression : NA");
         }    
     }
-    while(lumi == NULL && compteur < 2){
+    while(*lumi == NULL && compteur < 2){
         temps = millis();
         if (temps > timeout){
             dataFile.println("Lumière : NA");
