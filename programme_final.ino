@@ -11,8 +11,8 @@
 #define RED_B 2
 #define GREEN_B 3
 #define DELAI_SANS_REBOND 100
-#define pinData 3
-#define pinClock 4
+#define pinData 4
+#define pinClock 5
 #define NUM_LEDS 1
 #define chipSelect 4
 #define SD_CHIP_SELECT_PIN 10 // Utilisé si nécessaire
