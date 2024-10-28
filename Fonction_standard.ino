@@ -4,84 +4,58 @@
 #include "SPI.h"
 #include "SD.h"
 
-#define adresseI2CBME 0x76
-int lightsensor = A1;
-
-RTC_DS1307 rtc;
-Adafruit_BME280 bme;
-
-File myFile;  // Utilisation du type correct pour la manipulation des fichiers SD
+// Pour la carte SD
+File backup;
+File myFile;
 const int chipSelect = 4;
 
-const int pinData = 3;
-const int pinClock = 4;
-ChainableLED leds(pinData, pinClock, 1);
+//Pour l'horloge RTC
+RTC_DS1307 rtc;
+Adafruit_BME280 bme;
+DateTime now;
 
-//int timeout = 30000;
-int timeout = 5000;
-//int log_intervall = 600000;
+// Définition des constantes 
+int timeout = 2500;
 int log_intervall = 10000;
+const long FILE_MAX_SIZE = 2048;  // Limite de taille du fichier (2 Ko)
 
-// Définition gestion des erreurs 
-
-void erreur_date(){
-  if (!rtc.begin()) {
-    Serial.println("Erreur de connexion avec le module RTC");
-    while (!rtc.begin()){
-      leds.setColorRGB(0, 255, 0, 0);
-      delay(1500);
-      leds.setColorRGB(0, 0, 0, 255);
-      delay(1500);
-    }  // Bloquer le programme si le RTC n'est pas détecté
-    leds.setColorRGB(0, 0, 255, 0);
-  }
-}
-
-void erreur_temp (){
-  if (!bme.begin(adresseI2CBME)) {
-    Serial.println("Erreur de connexion avec le capteur BME280");
-    while (!bme.begin(adresseI2CBME)){
-      leds.setColorRGB(0, 255, 0, 0);
-      delay(1500);
-      leds.setColorRGB(0, 0, 255, 0);
-      delay(3000);
-    }
-    leds.setColorRGB(0, 0, 255, 0);
-  }  // Bloquer le programme si le capteur BME280 n'est pas détecté
-}
-
-void erreur_SD (){
-  if (!SD.begin(chipSelect)) {
-    Serial.println("Initialisation failed");
-    while (!SD.begin(chipSelect)){
-      leds.setColorRGB(0, 255, 0, 0);
-      delay(1500);
-      leds.setColorRGB(0, 255, 255, 255);
-      delay(1500);
-    }
-    leds.setColorRGB(0, 0, 255, 0);
-  }
-  
+// Fonction pour créer le nom du fichier au format jour_mois_année_rev.LOG
+String generateFileName(int revision) {
+  now = rtc.now();
+  char fileName[15];
+  snprintf(fileName, sizeof(fileName), "%02d%02d%02d%d.log", now.day(), now.month(), now.year() % 100, revision);
+  //Serial.println("nom fichier créé");
+  return String(fileName);
 }
 
 void setup() {
-  Serial.begin(9600);
-  leds.init();
-  while (!Serial);  // Attendre que la communication série soit prête
-  erreur_date(); 
-  if (!rtc.isrunning()) {
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));  // Ajuster avec la date et heure actuelle
+  Serial.begin(9600); // connexion serie 
+  
+  // Initialisation horloge
+  if (!rtc.begin()) {
+    Serial.println("Erreur d'initialisation RTC");
+    while (1);
   }
-  erreur_temp();
   pinMode(SS, OUTPUT);
   erreur_SD();
 }
 
-void sauvegarde(char* date, float* temp, float* humi, float* press, float *alt, int* lumi) {
+void erreur_SD() {
+  if (!SD.begin(chipSelect)) {
+    Serial.println("Échec de l'initialisation SD");
+    while (!SD.begin(chipSelect)) {
+      delay(1500);
+    }
+  }
+}
+
+void sauvegarde(char* date, float* temp, float* humi, float* press, float* alt, int* lumi) {
   erreur_SD();
-  myFile = SD.open("Save.txt", FILE_WRITE);
+  Serial.println(generateFileName(0).c_str());
+  myFile = SD.open(generateFileName(0).c_str(), FILE_WRITE);  // Ouvrir le fichier révision 0
+  Serial.println(myFile);
   if (myFile) {
-    Serial.println("Enregistrement sur Save.txt");
+    Serial.println("Enregistrement dans le fichier révision 0");
     myFile.print("Date : ");
     myFile.print(date);
     myFile.print(" Données : Température : ");
@@ -96,77 +70,56 @@ void sauvegarde(char* date, float* temp, float* humi, float* press, float *alt, 
     myFile.print(*lumi);
     myFile.println(" /1023");
     myFile.close();
-    Serial.println("Données enregistrés");
+    Serial.println("Données enregistrées");
+
+    //##################Pour gérer le fait que le fichier est trop volumineux #################################
+    Serial.println(myFile.size());
+    if (myFile.size()> 2048){
+      Serial.println("Fichier trop volumineux");
+      myFile = SD.open(generateFileName(0).c_str(), FILE_READ);
+      String backup_name = generateFileName(1); // création du nouveau fichier avec la révision en 1
+      backup = SD.open(backup_name.c_str(), FILE_WRITE); // ouverture du nouveau fichier 
+      if (!backup){ // verification de si le fichier backup est ouvert ou non
+        Serial.println("Erreur d'ouverture du fichier backup");
+      }
+      int compteur = myFile.available(); // definit la variable qui va permettre de savoir combien d'octets reste il à copier dans le nouveau fichier
+      while (compteur>0) {
+        Serial.println(myFile.read()); // Pour voir l'erreur
+        if (backup){ // Pour etre sure que le fichier est ouvert
+          backup.write(myFile.read());
+          Serial.println("ecriture sur le nouveau fichier normalement faite");
+        }
+        compteur = compteur -1;
+        Serial.println(compteur); // Pour voir si le compteur fonctionne bien 
+        delay(1000);
+      }
+      Serial.println("backup faite");
+    }
+    myFile.close();
+    //*******************************************************************************
+
+    //checkAndBackupFile();  // Vérifie la taille après chaque sauvegarde
   } else {
-    Serial.println("Erreur d'ouverture de Save.txt");
+    Serial.println("Erreur d'ouverture du fichier révision 0");
   }
-}
 
-void lumiere(int* raw_light, int* light) {
-  //erreur_light();
-  *raw_light = analogRead(lightsensor);
-  *light = map(*raw_light, 0, 757, 0, 1023);
-}
-
-void lire_temperature(float* temp, float* humi, float* press, float* alt) {
-  erreur_temp();
-  *temp = bme.readTemperature();
-  *humi = bme.readHumidity();
-  *press = bme.readPressure() / 100.0F;
-  *alt = bme.readAltitude(1029);
-}
-
-void lire_date_heure(char* buffer) {
-  erreur_date();
-  DateTime now = rtc.now();
-  sprintf(buffer, "Date: %02d/%02d/%04d Heure: %02d:%02d:%02d", 
-          now.day(), now.month(), now.year(),
-          now.hour(), now.minute(), now.second());
 }
 
 void standard() {
-  Serial.println("Mode standard");
-  leds.setColorRGB(0, 0, 255, 0);  // Allume la LED en vert
-  char date_heure[40];  // Déclare un tableau de 40 caractères pour stocker la date et l'heure
-  lire_date_heure(date_heure);  // Appelle la fonction pour remplir le tableau
-  Serial.println(date_heure);  // Affiche la date et l'heure dans le moniteur série
-
-  float temperature;
-  float humidity;
-  float pressure;
-  float altitude;
-  lire_temperature(&temperature, &humidity, &pressure, &altitude);
-
-  // Affichage pour le débogage
-  Serial.print("Température: ");
-  Serial.print(temperature);
-  Serial.println(" °C");
-
-  Serial.print("Humidité: ");
-  Serial.print(humidity);
-  Serial.println(" %");
-
-  Serial.print("Pression: ");
-  Serial.print(pressure);
-  Serial.println(" hPa");
-
-  Serial.print("Altitude: ");
-  Serial.print(altitude);
-  Serial.println(" m");
-
-  int raw_light;
-  int light;
-  lumiere(&raw_light, &light);
-  Serial.print("Lumière : ");
-  Serial.println(light);
-
-  delay(timeout);
-
+  char date_heure[20];
+  now = rtc.now();
+  // definition de données pour tester la sauvegarde
+  snprintf(date_heure, sizeof(date_heure), "%02d/%02d/%02d %02d:%02d", now.year() % 100, now.month(), now.day(), now.hour(), now.minute());
+  float temperature = 20.2;
+  float humidity = 20.2;
+  float pressure = 1013.3;
+  float altitude = 232.3;
+  int light = 3;
+  
   sauvegarde(date_heure, &temperature, &humidity, &pressure, &altitude, &light);
-
   delay(log_intervall);
 }
 
 void loop() {
   standard();
-}
+} 
