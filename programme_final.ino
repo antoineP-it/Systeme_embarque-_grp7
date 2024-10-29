@@ -84,7 +84,7 @@ void handleGreenButtonPress();
 // Fonction setup
 void setup() {
   Serial.begin(9600);
-  //leds.init();
+  leds.init();
   pinMode(RED_B, INPUT_PULLUP); // Utilisation des résistances pull-up internes
   pinMode(GREEN_B, INPUT_PULLUP);
   pinMode(SS, OUTPUT); // Pour la carte SD
@@ -96,6 +96,7 @@ void setup() {
   if (digitalRead(RED_B) == LOW) {
     mode_configuration();
   }
+  Serial.println("c good");
   delay(300);
 
   // Initialisation des capteurs et des modules
@@ -209,6 +210,7 @@ void handleGreenButtonPress() {
 
 // Mode standard
 void mode_standard() {
+  //Serial.println(EEPROM.read(0));
   if (millis() - previousLogTime >= EEPROM.read(0)*1000) {
     previousLogTime = millis();
     leds.setColorRGB(0, 0, 255, 0);  // Allume la LED en vert
@@ -226,7 +228,7 @@ void mode_standard() {
     int light;
 
     lire_temperature(&temperature, &humidity, &pressure, &altitude);
-
+/*
     // Affichage pour le débogage
     Serial.print(F("Température: "));
     Serial.print(temperature);
@@ -247,7 +249,7 @@ void mode_standard() {
     lumiere(&raw_light, &light);
     Serial.print(F("Lumière : "));
     Serial.println(light);
-
+*/
     sauvegarde(date_heure, temperature, humidity, pressure, altitude, light);
   }
 }
@@ -279,10 +281,10 @@ void mode_economie() {
       if (lire_gps(&gps)) { // lire_gps retourne true
         gpsDataAvailable = true;
         // Afficher les données GPS
-        Serial.print(F("Latitude : "));
-        Serial.println(gps.latitude, 6);
-        Serial.print(F("Longitude : "));
-        Serial.println(gps.longitude, 6);
+        //Serial.print(F("Latitude : "));
+        //Serial.println(gps.latitude, 6);
+        //Serial.print(F("Longitude : "));
+        //Serial.println(gps.longitude, 6);
       } else {
         // Si lire_gps retourne false, ce qui ne devrait pas arriver ici
         Serial.println(F("Données GPS non capturées cette fois"));
@@ -293,7 +295,7 @@ void mode_economie() {
     GPS_Actif = !GPS_Actif;
 
     lire_temperature(&temperature, &humidity, &pressure, &altitude);
-
+/*
     // Affichage pour le débogage
     Serial.print(F("Température: "));
     Serial.print(temperature);
@@ -314,7 +316,7 @@ void mode_economie() {
     lumiere(&raw_light, &light);
     Serial.print(F("Lumière : "));
     Serial.println(light);
-
+*/
     sauvegarde(date_heure, temperature, humidity, pressure, altitude, light);
   }
 }
@@ -551,10 +553,6 @@ void configurer_parametres(String command){
     int annee = atoi(valeur);
     Serial.println(annee);
     DATE(jour, mois, annee);
-	}else if (strncmp(commande, "DAY=", 4) == 0){
-		String day = strtok(commande, "=");
-		day = strtok(NULL, "=");
-		DAY(day);
 	}
 	actif = false;
 }
@@ -568,9 +566,11 @@ int transformation(const char* commande){
 void inactif(){
 	unsigned long time1 = millis();
 	unsigned long time2;
+  actif =false; 
 	while (!actif){
 		time2 = millis();
-		if (time2 - time1 >= 10000){
+    //Serial.println(time2 - time1);
+		if (time2 - time1 >= 30000){
 			return;
 		}else if (Serial.available() != 0){
 			actif = true;
@@ -656,27 +656,6 @@ void DATE(int mois, int jour, int annee){
   DateTime actuel = rtc.now();
   DateTime date_mise_a_jour = DateTime(annee, mois, jour, actuel.hour(), actuel.minute(), actuel.second());
   rtc.adjust(date_mise_a_jour);
-}
-
-void DAY(String j){
-  String jour;
-  if (j == "MON"){
-    jour = "Lundi";
-  }else if (j == "TUE"){
-    jour = "Mardi";
-  }else if (j == "WED"){
-    jour = "Mercredi";
-  }else if (j == "THU"){
-    jour = "Jeudi";
-  }else if (j == "FRI"){
-    jour = "Vendredi";
-  }else if (j == "SAT"){
-    jour = "Samedi";
-  }else if (j == "SUN"){
-    jour = "Dimanche";
-  }
-  Serial.print("Jour initialisé à: ");
-  Serial.println(jour);
 }
 
 void VERSION(){
