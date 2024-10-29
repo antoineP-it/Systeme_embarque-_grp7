@@ -1,33 +1,57 @@
 void erreurNA(float* temp, float* humi, float* press, float* alt, float* lumi) {
-    int compteur = 0
-    while(*temp == NULL && compteur < 2){
-        temps = millis();
-        if (temps > timeout){
+    int compteur = 0;
+    unsigned long timeout = 30000;
+    unsigned long temps = millis();
+
+    while (isnan(*temp) && compteur < 2) {
+        if (millis() - temps > timeout) {
             dataFile.println("Température : NA");
-        }    
+            compteur++;
+            temps = millis(); 
+        }
     }
-    while(*humi == NULL && compteur < 2){
-        temps = millis();
-        if (temps > timeout){
+    
+    compteur = 0;
+    temps = millis();
+    
+    while (isnan(*humi) && compteur < 2) {
+        if (millis() - temps > timeout) {
             dataFile.println("Humidité : NA");
-        }    
+            compteur++;
+            temps = millis();
+        }
     }
-    while(*alt == NULL && compteur < 2){
-        temps = millis();
-        if (temps > timeout){
+    
+    compteur = 0;
+    temps = millis();
+    
+    while (isnan(*alt) && compteur < 2) {
+        if (millis() - temps > timeout) {
             dataFile.println("Altitude : NA");
-        }    
+            compteur++;
+            temps = millis();
+        }
     }
-    while(*press == NULL && compteur < 2){
-        temps = millis();
-        if (temps > timeout){
+    
+    compteur = 0;
+    temps = millis();
+    
+    while (isnan(*press) && compteur < 2) {
+        if (millis() - temps > timeout) {
             dataFile.println("Pression : NA");
-        }    
+            compteur++;
+            temps = millis();
+        }
     }
-    while(*lumi == NULL && compteur < 2){
-        temps = millis();
-        if (temps > timeout){
+    
+    compteur = 0;
+    temps = millis();
+    
+    while (isnan(*lumi) && compteur < 2) {
+        if (millis() - temps > timeout) {
             dataFile.println("Lumière : NA");
-        }    
+            compteur++;
+            temps = millis();
+        }
     }
 }
