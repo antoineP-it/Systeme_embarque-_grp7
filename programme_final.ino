@@ -81,6 +81,10 @@ bool lire_gps(GPSData* gps);
 void handleRedButtonPress();
 void handleGreenButtonPress();
 
+// Prototypes des nouvelles fonctions
+void donneeIncoherente(float* temp, float* humi, float* press, float* alt, float* lumi);
+void erreurNA(float* temp, float* humi, float* press, float* alt, float* lumi);
+
 // Fonction setup
 void setup() {
   Serial.begin(9600);
@@ -96,7 +100,7 @@ void setup() {
   if (digitalRead(RED_B) == LOW) {
     mode_configuration();
   }
-  Serial.println("c good");
+  Serial.println(F("c good"));
   delay(300);
 
   // Initialisation des capteurs et des modules
@@ -161,10 +165,13 @@ void updateMode() {
       if (mode_std) {
         mode_std = false;
         mode_mtn = true;
+        Serial.println(F("Passage en mode maintenance"));
       } else {
-      mode_std = true;
-      mode_eco = false;
-      mode_mtn = false;
+        mode_std = true;
+        mode_eco = false;
+        mode_mtn = false;
+        Serial.println(F("Retour en mode standard"));
+        reactiver_SD(); // Réactiver SD après retour en mode standard
       }
     }
   }
@@ -177,6 +184,7 @@ void updateMode() {
     if (pressDuration >= 5000 && mode_std) {
       mode_std = false;
       mode_eco = true;
+      Serial.println(F("Passage en mode économique"));
     } else if (!mode_std) {
       Serial.println(F("Appuyer sur le bouton rouge pour repasser en mode standard"));
     }
@@ -197,6 +205,7 @@ void handleRedButtonPress() {
   // Démarrer le chronométrage si ce n'est pas déjà fait
   if (redPressStartTime == 0) {
     redPressStartTime = millis();
+    Serial.println(F("Appui bouton rouge détecté"));
   }
 }
 
@@ -205,17 +214,17 @@ void handleGreenButtonPress() {
   // Démarrer le chronométrage si ce n'est pas déjà fait
   if (greenPressStartTime == 0) {
     greenPressStartTime = millis();
+    Serial.println(F("Appui bouton vert détecté"));
   }
 }
 
 // Mode standard
 void mode_standard() {
-  //Serial.println(EEPROM.read(0));
   if (millis() - previousLogTime >= EEPROM.read(0)*1000) {
     previousLogTime = millis();
     leds.setColorRGB(0, 0, 255, 0);  // Allume la LED en vert
 
-    char date_heure[40];
+    char date_heure[30]; // Réduit la taille du buffer si possible
     lire_date_heure(date_heure);
     Serial.println(date_heure);
 
@@ -228,28 +237,15 @@ void mode_standard() {
     int light;
 
     lire_temperature(&temperature, &humidity, &pressure, &altitude);
-/*
-    // Affichage pour le débogage
-    Serial.print(F("Température: "));
-    Serial.print(temperature);
-    Serial.println(F(" °C"));
-
-    Serial.print(F("Humidité: "));
-    Serial.print(humidity);
-    Serial.println(F(" %"));
-
-    Serial.print(F("Pression: "));
-    Serial.print(pressure);
-    Serial.println(F(" hPa"));
-
-    Serial.print(F("Altitude: "));
-    Serial.print(altitude);
-    Serial.println(F(" m"));
-
     lumiere(&raw_light, &light);
-    Serial.print(F("Lumière : "));
-    Serial.println(light);
-*/
+
+    // Vérifier les données incohérentes
+    donneeIncoherente(&temperature, &humidity, &pressure, &altitude, (float*)&light);
+
+    // Gérer les erreurs de données non disponibles
+    erreurNA(&temperature, &humidity, &pressure, &altitude, (float*)&light);
+
+    // Sauvegarder les données
     sauvegarde(date_heure, temperature, humidity, pressure, altitude, light);
   }
 }
@@ -260,7 +256,7 @@ void mode_economie() {
     previousLogTime = millis();
     leds.setColorRGB(0, 0, 0, 255);  // Allume la LED en bleu
 
-    char date_heure[40];
+    char date_heure[30]; // Réduit la taille du buffer si possible
     lire_date_heure(date_heure);
     Serial.println(date_heure);
 
@@ -295,34 +291,22 @@ void mode_economie() {
     GPS_Actif = !GPS_Actif;
 
     lire_temperature(&temperature, &humidity, &pressure, &altitude);
-/*
-    // Affichage pour le débogage
-    Serial.print(F("Température: "));
-    Serial.print(temperature);
-    Serial.println(F(" °C"));
-
-    Serial.print(F("Humidité: "));
-    Serial.print(humidity);
-    Serial.println(F(" %"));
-
-    Serial.print(F("Pression: "));
-    Serial.print(pressure);
-    Serial.println(F(" hPa"));
-
-    Serial.print(F("Altitude: "));
-    Serial.print(altitude);
-    Serial.println(F(" m"));
-
     lumiere(&raw_light, &light);
-    Serial.print(F("Lumière : "));
-    Serial.println(light);
-*/
+
+    // Vérifier les données incohérentes
+    donneeIncoherente(&temperature, &humidity, &pressure, &altitude, (float*)&light);
+
+    // Gérer les erreurs de données non disponibles
+    erreurNA(&temperature, &humidity, &pressure, &altitude, (float*)&light);
+
+    // Sauvegarder les données
     sauvegarde(date_heure, temperature, humidity, pressure, altitude, light);
   }
 }
 
 // Mode maintenance
 void mode_maintenance(){
+  Serial.println(F("Entrée en mode maintenance"));
   leds.setColorRGB(0, 255, 165, 0); // LED RGB en orange
   delay(5000);
 
@@ -336,10 +320,27 @@ void mode_maintenance(){
         Serial.write(dataFile.read());
       }
       dataFile.close(); // Ferme le fichier après lecture
+
+      // Afficher les fichiers sur la carte SD
+      File root = SD.open("/"); // Ouvre le répertoire racine de la carte SD
+      while(true){ 
+        File entry =  root.openNextFile(); // Ouvre le prochain fichier du répertoire
+        if (!entry) { 
+          break; // plus de fichier
+        }
+        Serial.println(entry.name()); // Affiche le nom du fichier ou dossier sur le moniteur de série
+        entry.close(); // Fermeture des fichiers ou dossiers
+      }
+      root.close(); // Ferme le répertoire racine
+
       SD.end();
       digitalWrite(SS, HIGH); // Désactive la carte SD
       Serial.println(F("Vous pouvez désormais changer la carte"));
-    } else {
+
+      // Réactiver la carte SD pour l'écriture après sortie du mode maintenance
+      reactiver_SD();
+    } 
+    else {
       Serial.println(F("Erreur d’accès ou d’écriture sur la carte SD"));
       // Remplacer 'red_button' par 'RED_B'
       while (digitalRead(RED_B) == LOW) { // Tant que le bouton rouge est appuyé
@@ -349,13 +350,54 @@ void mode_maintenance(){
         delay(2000);
       }
     }
-  } else {
+  } 
+  else {
     Serial.println(F("Erreur d’initialisation de la carte SD en mode maintenance"));
   }
 }
 
+// Fonction pour réactiver la carte SD après maintenance
+void reactiver_SD() {
+    digitalWrite(SS, LOW); // Activer la carte SD
+    if (SD.begin(chipSelect)) {
+        Serial.println(F("Carte SD réactivée pour l'écriture."));
+    } else {
+        Serial.println(F("Erreur de réactivation de la carte SD."));
+    }
+}
 
+// Mode configuration
+void mode_configuration() {
+  leds.setColorRGB(0, 255, 255, 0); // LED RGB en cyan
+  desactiver_capteur();
+  configurer_parametres(Serial.readString());
+  inactif();
+  activer_capteur();
 
+  // Après configuration, lire les données pour vérifier
+  char date_heure[30];
+  lire_date_heure(date_heure);
+
+  // Déclarer les variables localement
+  float temperature;
+  float humidity;
+  float pressure;
+  float altitude;
+  int raw_light;
+  int light;
+
+  lire_temperature(&temperature, &humidity, &pressure, &altitude);
+  lumiere(&raw_light, &light);
+
+  // Vérifier les données incohérentes
+  donneeIncoherente(&temperature, &humidity, &pressure, &altitude, (float*)&light);
+
+  // Gérer les erreurs de données non disponibles
+  erreurNA(&temperature, &humidity, &pressure, &altitude, (float*)&light);
+
+  // Sauvegarder les données
+  sauvegarde(date_heure, temperature, humidity, pressure, altitude, light);
+}
 
 // Fonctions d'erreur
 void erreur_date() {
@@ -464,6 +506,7 @@ void red_button_ISR() {
 void green_button_ISR() {
   drapeau_bouton_vert = true;
 }
+
 
 void activer_capteur(){
 	LUMIN(1);
@@ -666,11 +709,122 @@ void RESET(){
   initialisation_EEPROM();
 }
 
-// Mode configuration
-void mode_configuration() {
-  leds.setColorRGB(0, 255, 255, 0);
-	desactiver_capteur();
-  configurer_parametres(Serial.readString());
-	inactif();
-	activer_capteur();
+
+
+
+
+// Fonction pour vérifier les données incohérentes
+void donneeIncoherente(float* temp, float* humi, float* press, float* alt, float* lumi){
+    if(*lumi > 1023 || *lumi < 0){
+        Serial.println(F("Données du capteur de lumière incohérente."));
+    }
+    if(*humi > 85 || *humi < -40){
+        Serial.println(F("Données du capteur d'humidité incohérente."));
+    }   
+    if(*temp > 85 || *temp < -40){
+        Serial.println(F("Données du capteur de température incohérente."));
+    }
+    if(*press > 1100 || *press < 300){
+        Serial.println(F("Données du capteur de pression incohérente."));
+    }
+}
+
+// Fonction pour gérer les erreurs de données non disponibles (NA)
+void erreurNA(float* temp, float* humi, float* press, float* alt, float* lumi) {
+    // Déclaration de variables locales pour les flags
+    bool temp_NA = false;
+    bool humi_NA = false;
+    bool press_NA = false;
+    bool alt_NA = false;
+    bool lumi_NA = false;
+
+    int compteur = 0;
+    unsigned long timeout = 30000; // 30 secondes
+    unsigned long temps = millis();
+
+    // Vérification de la température
+    while (isnan(*temp) && compteur < 2) {
+        if (millis() - temps > timeout) {
+            temp_NA = true;
+            compteur++;
+            temps = millis(); 
+        }
+    }
+    
+    compteur = 0;
+    temps = millis();
+    
+    // Vérification de l'humidité
+    while (isnan(*humi) && compteur < 2) {
+        if (millis() - temps > timeout) {
+            humi_NA = true;
+            compteur++;
+            temps = millis();
+        }
+    }
+    
+    compteur = 0;
+    temps = millis();
+    
+    // Vérification de l'altitude
+    while (isnan(*alt) && compteur < 2) {
+        if (millis() - temps > timeout) {
+            alt_NA = true;
+            compteur++;
+            temps = millis();
+        }
+    }
+    
+    compteur = 0;
+    temps = millis();
+    
+    // Vérification de la pression
+    while (isnan(*press) && compteur < 2) {
+        if (millis() - temps > timeout) {
+            press_NA = true;
+            compteur++;
+            temps = millis();
+        }
+    }
+    
+    compteur = 0;
+    temps = millis();
+    
+    // Vérification de la lumière
+    while (isnan(*lumi) && compteur < 2) {
+        if (millis() - temps > timeout) {
+            lumi_NA = true;
+            compteur++;
+            temps = millis();
+        }
+    }
+
+    // Enregistrement des erreurs dans le fichier SD
+    if (SD.begin(chipSelect)) { // Assurez-vous que la carte SD est initialisée
+        File dataFile = SD.open("Save.txt", FILE_WRITE);
+        if (dataFile) {
+            if (temp_NA) dataFile.print(F("Température: NA "));
+            if (humi_NA) dataFile.print(F("Humidité: NA "));
+            if (press_NA) dataFile.print(F("Pression: NA "));
+            if (alt_NA) dataFile.print(F("Altitude: NA "));
+            if (lumi_NA) dataFile.print(F("Lumière: NA "));
+            dataFile.println();
+            dataFile.close();
+        } else {
+            Serial.println(F("Erreur d'ouverture de Save.txt pour enregistrer les erreurs NA"));
+        }
+        SD.end();
+    } else {
+        Serial.println(F("Erreur d’initialisation de la carte SD dans erreurNA"));
+    }
+}
+
+// Fonction pour réactiver la carte SD après maintenance
+void reactiver_SD() {
+    digitalWrite(SS, LOW); // Activer la carte SD
+    if (SD.begin(chipSelect)) {
+        Serial.println(F("Carte SD réactivée pour l'écriture."));
+    } else {
+        Serial.println(F("Erreur de réactivation de la carte SD."));
+    }
 }
