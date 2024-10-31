@@ -2,7 +2,6 @@
 #include <ChainableLED.h>
 #include <RTClib.h>
 #include <Adafruit_BME280.h>
-#include <SPI.h>
 #include <SD.h>
 #include <EEPROM.h>
 #include <avr/pgmspace.h>
@@ -25,6 +24,11 @@ RTC_DS1307 rtc;
 Adafruit_BME280 bme;
 ChainableLED leds(pinData, pinClock, NUM_LEDS);
 File myFile;  // Pour la manipulation des fichiers SD
+File backup;
+DateTime now;
+
+int revision = 0;
+int lastDay = -1;
 
 // Variables pour la gestion des boutons avec anti-rebond
 volatile bool drapeau_bouton_rouge = false;
@@ -62,90 +66,6 @@ unsigned long previousLogTime = 0;
 // Tableau de valeurs par défauts
 const int16_t DEFAUT[] PROGMEM = {10, 4096, 30, 1, 255, 768, 1, -10, 60, 1, 0, 50, 1, 850, 1080};
 
-// Prototypes des fonctions
-void red_button_ISR();
-void green_button_ISR();
-void updateMode();
-void mode_standard();
-void mode_configuration();
-void mode_economie();
-void mode_maintenance();
-void erreur_date();
-void erreur_temp();
-void erreur_SD();
-void lire_date_heure(char* buffer);
-void lire_temperature(float* temp, float* humi, float* press, float* alt);
-void lumiere(int* raw_light, int* light);
-void sauvegarde(const char* date, float temp, float humi, float press, float alt, int lumi);
-bool lire_gps(GPSData* gps);
-void handleRedButtonPress();
-void handleGreenButtonPress();
-
-// Fonction setup
-void setup() {
-  Serial.begin(9600);
-  leds.init();
-  pinMode(RED_B, INPUT_PULLUP); // Utilisation des résistances pull-up internes
-  pinMode(GREEN_B, INPUT_PULLUP);
-  pinMode(SS, OUTPUT); // Pour la carte SD
-
-  Serial.println(F("Initialisation du système..."));
-
-  // Gestion du mode configuration
-  delay(500);
-  if (digitalRead(RED_B) == LOW) {
-    mode_configuration();
-  }
-  Serial.println("c good");
-  delay(300);
-
-  // Initialisation des capteurs et des modules
-  erreur_date();
-  if (!rtc.isrunning()) {
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    Serial.println(F("RTC ajusté."));
-  }
-  erreur_temp();
-  erreur_SD();
-
-  // Attacher les interruptions
-  attachInterrupt(digitalPinToInterrupt(RED_B), red_button_ISR, FALLING);
-  attachInterrupt(digitalPinToInterrupt(GREEN_B), green_button_ISR, FALLING);
-
-  Serial.println(F("Initialisation terminée."));
-}
-
-// Fonction loop
-void loop() {
-  // Gestion du bouton rouge
-  if (drapeau_bouton_rouge) {
-    noInterrupts();
-    drapeau_bouton_rouge = false;
-    interrupts();
-
-    unsigned long currentMillis = millis();
-    if (currentMillis - lastRedButtonPress >= debounceDelay) {
-      lastRedButtonPress = currentMillis;
-      handleRedButtonPress();
-    }
-  }
-
-  // Gestion du bouton vert
-  if (drapeau_bouton_vert) {
-    noInterrupts();
-    drapeau_bouton_vert = false;
-    interrupts();
-
-    unsigned long currentMillis = millis();
-    if (currentMillis - lastGreenButtonPress >= debounceDelay) {
-      lastGreenButtonPress = currentMillis;
-      handleGreenButtonPress();
-    }
-  }
-
-  // Mise à jour du mode actif
-  updateMode();
-}
 
 // Fonction pour gérer la transition entre les modes
 void updateMode() {
@@ -250,7 +170,7 @@ void mode_standard() {
     Serial.print(F("Lumière : "));
     Serial.println(light);
 */
-    sauvegarde(date_heure, temperature, humidity, pressure, altitude, light);
+    sauvegarde(date_heure, &temperature, &humidity, &pressure, &altitude, &light);
   }
 }
 
@@ -317,7 +237,7 @@ void mode_economie() {
     Serial.print(F("Lumière : "));
     Serial.println(light);
 */
-    sauvegarde(date_heure, temperature, humidity, pressure, altitude, light);
+    sauvegarde(date_heure, &temperature, &humidity, &pressure, &altitude, &light);
   }
 }
 
@@ -328,7 +248,8 @@ void mode_maintenance(){
 
   // Arrêt de l'écriture, vous pouvez consulter les données de la carte
   if (SD.begin(chipSelect)) { // Vérifiez si la carte SD est initialisée
-    File dataFile = SD.open("Save.txt");
+    String fileName = generateFileName(revision);
+    File dataFile = SD.open(fileName.c_str());
     if (dataFile) {
       Serial.println(F("Arrêt de l'écriture, vous pouvez consulter les données de la carte"));
       while (dataFile.available()) {
@@ -353,8 +274,6 @@ void mode_maintenance(){
     Serial.println(F("Erreur d’initialisation de la carte SD en mode maintenance"));
   }
 }
-
-
 
 
 // Fonctions d'erreur
@@ -430,33 +349,62 @@ bool lire_gps(GPSData* gps) {
   return true;
 }
 
+//########################################################################################################################################################################################################
+String generateFileName(int revision) {
+  now = rtc.now();
+  char fileName[15];
+  snprintf(fileName, sizeof(fileName), "%02d%02d%02d%d.log", now.day(), now.month(), now.year() % 100, revision);
+  return String(fileName);
+}
+//########################################################################################################################################################################################################
 // Fonction de sauvegarde des données
-void sauvegarde(const char* date, float temp, float humi, float press, float alt, int lumi) {
+void sauvegarde(const char* date, float* temp, float* humi, float* press, float* alt, int* lumi) {
   erreur_SD();
-  myFile = SD.open("Save.txt", FILE_WRITE);
+  //########################################################################################################################################
+  now = rtc.now();
+  if (now.day() != lastDay) {
+    revision = 0;
+    lastDay = now.day();
+  }
+  String fileName = generateFileName(revision);
+  //########################################################################################################################################
+  
+  myFile = SD.open(fileName.c_str(), FILE_WRITE);
   if (myFile) {
-    Serial.println(F("Enregistrement sur Save.txt"));
+    Serial.println(F("Enregistrement du fichier"));
     myFile.print(F("Date : "));
-    myFile.print(date);
+    myFile.print(*date);
     myFile.print(F(" Données : Température : "));
-    myFile.print(temp);
+    myFile.print(*temp);
     myFile.print(F("°C Humidité : "));
-    myFile.print(humi);
+    myFile.print(*humi);
     myFile.print(F("% Pression : "));
-    myFile.print(press);
+    myFile.print(*press);
     myFile.print(F(" hPa Altitude estimée : "));
-    myFile.print(alt);
+    myFile.print(*alt);
     myFile.print(F(" m Lumière : "));
-    myFile.print(lumi);
+    myFile.print(*lumi);
     myFile.println(F(" /1023"));
     myFile.close();
     Serial.println(F("Données enregistrées"));
+
+    //#######################################################################################################################################################################################################################
+    myFile = SD.open(fileName.c_str(), FILE_READ);
+    //Serial.println(EEPROM.read(2));
+    Serial.println(myFile.size());
+    if (myFile && myFile.size() > 2048) {
+      Serial.println("Fichier trop volumineux, création d'un nouveau fichier");
+      revision++;
+    }
+    myFile.close();
+    //#######################################################################################################################################################################################################################
   } else {
     Serial.println(F("Erreur d'ouverture de Save.txt"));
   }
 }
-
+//###########################################################################################################################################################################################################################
 // Gestion des interruptions
+
 void red_button_ISR() {
   drapeau_bouton_rouge = true;
 }
@@ -673,4 +621,71 @@ void mode_configuration() {
   configurer_parametres(Serial.readString());
 	inactif();
 	activer_capteur();
+}
+
+
+// Fonction setup
+void setup() {
+  Serial.begin(9600);
+  leds.init();
+  pinMode(RED_B, INPUT_PULLUP); // Utilisation des résistances pull-up internes
+  pinMode(GREEN_B, INPUT_PULLUP);
+  pinMode(SS, OUTPUT); // Pour la carte SD
+
+  Serial.println(F("Initialisation du système..."));
+
+  // Gestion du mode configuration
+  delay(500);
+  if (digitalRead(RED_B) == LOW) {
+    mode_configuration();
+  }
+  delay(300);
+
+  // Initialisation des capteurs et des modules
+  erreur_date();
+  if (!rtc.isrunning()) {
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    Serial.println(F("RTC ajusté."));
+  }
+  erreur_temp();
+  erreur_SD();
+
+  // Attacher les interruptions
+  attachInterrupt(digitalPinToInterrupt(RED_B), red_button_ISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(GREEN_B), green_button_ISR, FALLING);
+
+  Serial.println(F("Initialisation terminée."));
+  lastDay = now.day();
+}
+
+// Fonction loop
+void loop() {
+  // Gestion du bouton rouge
+  if (drapeau_bouton_rouge) {
+    noInterrupts();
+    drapeau_bouton_rouge = false;
+    interrupts();
+
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastRedButtonPress >= debounceDelay) {
+      lastRedButtonPress = currentMillis;
+      handleRedButtonPress();
+    }
+  }
+
+  // Gestion du bouton vert
+  if (drapeau_bouton_vert) {
+    noInterrupts();
+    drapeau_bouton_vert = false;
+    interrupts();
+
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastGreenButtonPress >= debounceDelay) {
+      lastGreenButtonPress = currentMillis;
+      handleGreenButtonPress();
+    }
+  }
+
+  // Mise à jour du mode actif
+  updateMode();
 }
