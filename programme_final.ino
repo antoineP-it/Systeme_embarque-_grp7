@@ -131,10 +131,9 @@ void handleGreenButtonPress() {
 // Mode standard
 void mode_standard() {
   //Serial.println(EEPROM.read(0));
+  leds.setColorRGB(0, 0, 255, 0);  // Allume la LED en vert
   if (millis() - previousLogTime >= EEPROM.read(0)*1000) {
     previousLogTime = millis();
-    leds.setColorRGB(0, 0, 255, 0);  // Allume la LED en vert
-
     char date_heure[40];
     lire_date_heure(date_heure);
     Serial.println(date_heure);
@@ -146,7 +145,7 @@ void mode_standard() {
     float altitude;
     int raw_light;
     int light;
-
+    lumiere(&raw_light, &light);
     lire_temperature(&temperature, &humidity, &pressure, &altitude);
 /*
     // Affichage pour le débogage
@@ -166,7 +165,7 @@ void mode_standard() {
     Serial.print(altitude);
     Serial.println(F(" m"));
 
-    lumiere(&raw_light, &light);
+    
     Serial.print(F("Lumière : "));
     Serial.println(light);
 */
@@ -215,6 +214,7 @@ void mode_economie() {
     GPS_Actif = !GPS_Actif;
 
     lire_temperature(&temperature, &humidity, &pressure, &altitude);
+    lumiere(&raw_light, &light);
 /*
     // Affichage pour le débogage
     Serial.print(F("Température: "));
@@ -233,7 +233,7 @@ void mode_economie() {
     Serial.print(altitude);
     Serial.println(F(" m"));
 
-    lumiere(&raw_light, &light);
+    
     Serial.print(F("Lumière : "));
     Serial.println(light);
 */
