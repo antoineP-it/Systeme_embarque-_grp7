@@ -60,11 +60,19 @@ struct GPSData {
   float altitude;
 };
 
+int t_max = 2048;
+int Lumin_Low = 0;
+int Lumin_High = 1023;
+int Temp_min = -10;
+int press_max = 1030;
+int press_min = 850;
+
+
 // Variables pour les temporisations des modes
 unsigned long previousLogTime = 0;
 
 // Tableau de valeurs par défauts
-const int16_t DEFAUT[] PROGMEM = {10, 4096, 30, 1, 255, 768, 1, -10, 60, 1, 0, 50, 1, 850, 1080}; // pour le reset
+const int16_t DEFAUT[15] PROGMEM = {10, 4096, 30, 1, 0, 1023, 1, -10, 60, 1, 0, 50, 1, 850, 1080}; // pour le reset
 
 
 // Fonction pour gérer la transition entre les modes
@@ -132,6 +140,7 @@ void handleGreenButtonPress() {
 void mode_standard() {
   //Serial.println(EEPROM.read(0));
   leds.setColorRGB(0, 0, 255, 0);  // Allume la LED en vert
+  //if (millis() - previousLogTime >= EEPROM.read(0)*60000) {
   if (millis() - previousLogTime >= EEPROM.read(0)*1000) {
     previousLogTime = millis();
     char date_heure[40];
@@ -147,6 +156,7 @@ void mode_standard() {
     int light;
     lumiere(&raw_light, &light);
     lire_temperature(&temperature, &humidity, &pressure, &altitude);
+    donneeIncoherente(&temperature, &humidity, &pressure, &altitude, &light);
 /*
     // Affichage pour le débogage
     Serial.print(F("Température: "));
@@ -175,7 +185,7 @@ void mode_standard() {
 
 // Mode économique
 void mode_economie() {
-  if (millis() - previousLogTime >= EEPROM.read(0)*1000 * 2) {
+  if (millis() - previousLogTime >= EEPROM.read(0)*60000 * 2) {
     previousLogTime = millis();
     leds.setColorRGB(0, 0, 0, 255);  // Allume la LED en bleu
 
@@ -313,6 +323,40 @@ void erreur_SD() {
     //leds.setColorRGB(0, 0, 255, 0);
   }
 }
+
+// Fonction pour vérifier les données incohérentes
+void donneeIncoherente(float* temp, float* humi, float* press, float* alt, int* lumi){
+  if(*lumi > Lumin_High || *lumi < Lumin_Low){
+    Serial.println(F("Données du capteur de lumière incohérente."));
+    while (1) {
+      leds.setColorRGB(0, 255, 0, 0);
+      delay(1500);
+      leds.setColorRGB(0, 0, 255, 0);
+      delay(3000);
+    }
+    //luminosité faible/forte
+  }  
+  if(*temp > EEPROM.read(16) || *temp < Temp_min){
+    Serial.println(F("Données du capteur de température incohérente."));
+    while (1) {
+      leds.setColorRGB(0, 255, 0, 0);
+      delay(1500);
+      leds.setColorRGB(0, 0, 255, 0);
+      delay(3000);
+    }
+    //humiditée non prise en compte
+  }
+  if(*press > press_max || *press < press_min){
+    Serial.println(F("Données du capteur de pression incohérente."));
+    while (1) {
+      leds.setColorRGB(0, 255, 0, 0);
+      delay(1500);
+      leds.setColorRGB(0, 0, 255, 0);
+      delay(3000);
+    }
+    
+  }
+}
 //Fin gestion des erreurs ###############################################################################################################################################################################
 
 // Gestion des capteurs ################################################################################################################################################################################
@@ -367,8 +411,9 @@ void sauvegarde(const char* date, float* temp, float* humi, float* press, float*
   myFile = SD.open(fileName.c_str(), FILE_WRITE);
   if (myFile) {
     //Serial.println(F("Enregistrement du fichier"));
+    //Serial.println(date);
     myFile.print(F("Date : "));
-    myFile.print(*date);
+    myFile.print(date);
     myFile.print(F(" Données : Température : "));
     myFile.print(*temp);
     myFile.print(F("°C Humidité : "));
@@ -385,7 +430,7 @@ void sauvegarde(const char* date, float* temp, float* humi, float* press, float*
     myFile = SD.open(fileName.c_str(), FILE_READ);
     //Serial.println(EEPROM.read(2));
     //Serial.println(myFile.size());
-    if (myFile && myFile.size() > 2048) {
+    if (myFile && myFile.size() > t_max) {
       Serial.println(F("nouveau fichier"));
       revision++;
     }
@@ -420,6 +465,7 @@ void configurer_parametres(String command){
 		LOG_INTERVALL(nombre);
 	}else if (strncmp(commande, "FILE_MAX_SIZE=", 14) == 0){
 		int nombre = transformation(commande);
+    t_max = transformation(commande);
 		FILE_MAX_SIZE(nombre);
 	}else if (command == "RESET"){
 		RESET();
@@ -434,15 +480,18 @@ void configurer_parametres(String command){
 	}else if (strncmp(commande, "LUMIN_LOW=", 10) == 0){
 		int nombre = transformation(commande);
 		LUMIN_LOW(nombre);
+    Lumin_Low = transformation(commande);
 	}else if (strncmp(commande, "LUMIN_HIGH=", 11) == 0){
 		int nombre = transformation(commande);
 		LUMIN_HIGH(nombre);
+    Lumin_High = transformation(commande);
 	}else if (strncmp(commande, "TEMP_AIR=", 9) == 0){
 		int nombre = transformation(commande);
 		TEMP_AIR(nombre);
 	}else if (strncmp(commande, "MIN_TEMP_AIR=", 13) == 0){
 		int nombre = transformation(commande);
 		MIN_TEMP_AIR(nombre);
+    Temp_min = transformation(commande);
 	}else if (strncmp(commande, "MAX_TEMP_AIR=", 13) == 0){
 		int nombre = transformation(commande);
 		MAX_TEMP_AIR(nombre);
@@ -461,9 +510,11 @@ void configurer_parametres(String command){
 	}else if (strncmp(commande, "PRESSURE_MIN=", 13) == 0){
 		int nombre = transformation(commande);
 		PRESSURE_MIN(nombre);
+    press_min = transformation(commande);
 	}else if (strncmp(commande, "PRESSURE_MAX=", 13) == 0){
 		int nombre = transformation(commande);
 		PRESSURE_MAX(nombre);
+    press_max = transformation(commande);
 	}else if (strncmp(commande, "CLOCK=", 6) == 0){
 		const char* valeur = strtok(commande, "=");
 		valeur = strtok(NULL, ":");
