@@ -74,6 +74,16 @@ unsigned long previousLogTime = 0;
 // Tableau de valeurs par défauts
 const int16_t DEFAUT[15] PROGMEM = {10, 4096, 30, 1, 0, 1023, 1, -10, 60, 1, 0, 50, 1, 850, 1080}; // pour le reset
 
+//Tableaux pour reconnaître les commandes en mode config
+typedef void (*Commandes)(int);
+
+const char* const nom_commandes[] PROGMEM = {"LOG_INTERVALL=", "FILE_MAX_SIZE=", "RESET", "VERSION", "TIMEOUT=", "LUMIN=", "LUMIN_LOW=", "LUMIN_HIGH=",
+    "TEMP_AIR=", "MIN_TEMP_AIR=", "MAX_TEMP_AIR=", "HYGR=", "HYGR_MINT=", "HYGR_MAXT=", "PRESSURE=", "PRESSURE_MIN=", "PRESSURE_MAX=", "CLOCK=", "DATE="};
+
+const int8_t num_commandes[] PROGMEM = {14, 14, 5, 6, 8, 6, 10, 11, 9, 13, 13, 5, 10, 10, 9, 13, 13, 6, 5};
+
+const Commandes commandes[] PROGMEM = {LOG_INTERVALL, FILE_MAX_SIZE, RESET, VERSION, TIMEOUT, LUMIN, LUMIN_LOW, LUMIN_HIGH,
+    TEMP_AIR, MIN_TEMP_AIR, MAX_TEMP_AIR, HYGR, HYGR_MINT, HYGR_MAXT, PRESSURE, PRESSURE_MIN, PRESSURE_MAX};
 
 // Fonction pour gérer la transition entre les modes
 void updateMode() {
@@ -457,86 +467,28 @@ void desactiver_capteur(){
 }
 
 void configurer_parametres(String command){
-  Serial.println(command);
   command.trim();
   const char* commande = command.c_str();
-	if (strncmp(commande, "LOG_INTERVALL=", 14) == 0){
-		int nombre = transformation(commande);
-		LOG_INTERVALL(nombre);
-	}else if (strncmp(commande, "FILE_MAX_SIZE=", 14) == 0){
-		int nombre = transformation(commande);
-    t_max = transformation(commande);
-		FILE_MAX_SIZE(nombre);
-	}else if (command == "RESET"){
-		RESET();
-	}else if (command == "VERSION"){
-		VERSION();
-	}else if (strncmp(commande, "TIMEOUT=", 8) == 0){
-		int nombre = transformation(commande);
-		TIMEOUT(nombre);
-	}else if (strncmp(commande, "LUMIN=", 6) == 0){
-		int nombre = transformation(commande);
-		LUMIN(nombre);
-	}else if (strncmp(commande, "LUMIN_LOW=", 10) == 0){
-		int nombre = transformation(commande);
-		LUMIN_LOW(nombre);
-    Lumin_Low = transformation(commande);
-	}else if (strncmp(commande, "LUMIN_HIGH=", 11) == 0){
-		int nombre = transformation(commande);
-		LUMIN_HIGH(nombre);
-    Lumin_High = transformation(commande);
-	}else if (strncmp(commande, "TEMP_AIR=", 9) == 0){
-		int nombre = transformation(commande);
-		TEMP_AIR(nombre);
-	}else if (strncmp(commande, "MIN_TEMP_AIR=", 13) == 0){
-		int nombre = transformation(commande);
-		MIN_TEMP_AIR(nombre);
-    Temp_min = transformation(commande);
-	}else if (strncmp(commande, "MAX_TEMP_AIR=", 13) == 0){
-		int nombre = transformation(commande);
-		MAX_TEMP_AIR(nombre);
-	}else if (strncmp(commande, "HYGR=", 5) == 0){
-		int nombre = transformation(commande);
-		HYGR(nombre);
-	}else if (strncmp(commande, "HYGR_MINT=", 10) == 0){
-		int nombre = transformation(commande);
-		HYGR_MINT(nombre);
-	}else if (strncmp(commande, "HYGR_MAXT=", 10) == 0){
-		int nombre = transformation(commande);
-		HYGR_MAXT(nombre);
-	}else if (strncmp(commande, "PRESSURE=", 9) == 0){
-		int nombre = transformation(commande);
-		PRESSURE(nombre);
-	}else if (strncmp(commande, "PRESSURE_MIN=", 13) == 0){
-		int nombre = transformation(commande);
-		PRESSURE_MIN(nombre);
-    press_min = transformation(commande);
-	}else if (strncmp(commande, "PRESSURE_MAX=", 13) == 0){
-		int nombre = transformation(commande);
-		PRESSURE_MAX(nombre);
-    press_max = transformation(commande);
-	}else if (strncmp(commande, "CLOCK=", 6) == 0){
-		const char* valeur = strtok(commande, "=");
-		valeur = strtok(NULL, ":");
-    int heure = atoi(valeur);
-    valeur = strtok(NULL, ":");
-    int minute = atoi(valeur);
-    valeur = strtok(NULL, ":");
-    int seconde = atoi(valeur);
-		CLOCK(heure, minute, seconde);
-	}else if (strncmp(commande, "DATE=", 5) == 0){
-		const char* valeur = strtok(commande, "=");
-		valeur = strtok(NULL, "/");
-    int mois = atoi(valeur);
-    Serial.println(mois);
-    valeur = strtok(NULL, "/");
-    int jour = atoi(valeur);
-    Serial.println(jour);
-    valeur = strtok(NULL, "/");
-    int annee = atoi(valeur);
-    Serial.println(annee);
-    DATE(jour, mois, annee);
-	}
+  for (int8_t i=0; i<15; i++){
+    if (strncmp(commande, pgm_read_word(&nom_commandes[i]), pgm_read_word(&num_commandes[i])) == 0){
+      if (command[8] == ':'){
+        int heure = t1(commande, 1);
+        int minute = t1(commande, 2);
+        int seconde = t1(commande, 3);
+        CLOCK(heure, minute, seconde);
+      }else if (command[7] == '/'){
+        int mois = t2(commande, 1);
+        int jour = t2(commande, 2);
+        int annee = t2(commande, 3);
+        DATE(mois, jour, annee);
+      }else{
+		    int nombre = transformation(commande);
+		    Commandes cmd = pgm_read_word(&commandes[i]);
+        cmd(nombre);
+      }
+      break;
+    }
+  }
 	actif = false;
 }
 
