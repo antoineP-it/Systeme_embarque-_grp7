@@ -61,12 +61,6 @@ struct GPSData {
 };
 
 int t_max = 2048;
-int Lumin_Low = 0;
-int Lumin_High = 1023;
-int Temp_min = -10;
-int press_max = 1030;
-int press_min = 850;
-
 
 // Variables pour les temporisations des modes
 unsigned long previousLogTime = 0;
@@ -74,16 +68,7 @@ unsigned long previousLogTime = 0;
 // Tableau de valeurs par défauts
 const int16_t DEFAUT[15] PROGMEM = {10, 4096, 30, 1, 0, 1023, 1, -10, 60, 1, 0, 50, 1, 850, 1080}; // pour le reset
 
-//Tableaux pour reconnaître les commandes en mode config
-typedef void (*Commandes)(int);
 
-const char* const nom_commandes[] PROGMEM = {"LOG_INTERVALL=", "FILE_MAX_SIZE=", "RESET", "VERSION", "TIMEOUT=", "LUMIN=", "LUMIN_LOW=", "LUMIN_HIGH=",
-    "TEMP_AIR=", "MIN_TEMP_AIR=", "MAX_TEMP_AIR=", "HYGR=", "HYGR_MINT=", "HYGR_MAXT=", "PRESSURE=", "PRESSURE_MIN=", "PRESSURE_MAX=", "CLOCK=", "DATE="};
-
-const int8_t num_commandes[] PROGMEM = {14, 14, 5, 6, 8, 6, 10, 11, 9, 13, 13, 5, 10, 10, 9, 13, 13, 6, 5};
-
-const Commandes commandes[] PROGMEM = {LOG_INTERVALL, FILE_MAX_SIZE, RESET, VERSION, TIMEOUT, LUMIN, LUMIN_LOW, LUMIN_HIGH,
-    TEMP_AIR, MIN_TEMP_AIR, MAX_TEMP_AIR, HYGR, HYGR_MINT, HYGR_MAXT, PRESSURE, PRESSURE_MIN, PRESSURE_MAX};
 
 // Fonction pour gérer la transition entre les modes
 void updateMode() {
@@ -149,9 +134,11 @@ void handleGreenButtonPress() {
 // Mode standard
 void mode_standard() {
   //Serial.println(EEPROM.read(0));
+  int16_t Log_intervall;
+  EEPROM.get(0, Log_intervall);
   leds.setColorRGB(0, 0, 255, 0);  // Allume la LED en vert
   //if (millis() - previousLogTime >= EEPROM.read(0)*60000) {
-  if (millis() - previousLogTime >= EEPROM.read(0)*1000) {
+  if (millis() - previousLogTime >= Log_intervall*1000) {
     previousLogTime = millis();
     char date_heure[40];
     lire_date_heure(date_heure);
@@ -195,7 +182,9 @@ void mode_standard() {
 
 // Mode économique
 void mode_economie() {
-  if (millis() - previousLogTime >= EEPROM.read(0)*60000 * 2) {
+  int16_t Log_intervall;
+  EEPROM.get(0, Log_intervall);
+  if (millis() - previousLogTime >= Log_intervall*60000 * 2) {
     previousLogTime = millis();
     leds.setColorRGB(0, 0, 0, 255);  // Allume la LED en bleu
 
@@ -336,6 +325,20 @@ void erreur_SD() {
 
 // Fonction pour vérifier les données incohérentes
 void donneeIncoherente(float* temp, float* humi, float* press, float* alt, int* lumi){
+  int16_t Lumin_Low;
+  int16_t Lumin_High;
+  int16_t Temp_min;
+  int16_t Temp_max;
+  int16_t press_min;
+  int16_t press_max;
+
+  EEPROM.get(8, Lumin_Low);
+  EEPROM.get(10, Lumin_High);
+  EEPROM.get(14, Temp_min);
+  EEPROM.get(16, Temp_max);
+  EEPROM.get(26, press_min);
+  EEPROM.get(28, press_max);
+  
   if(*lumi > Lumin_High || *lumi < Lumin_Low){
     Serial.println(F("Données du capteur de lumière incohérente."));
     while (1) {
@@ -346,7 +349,7 @@ void donneeIncoherente(float* temp, float* humi, float* press, float* alt, int* 
     }
     //luminosité faible/forte
   }  
-  if(*temp > EEPROM.read(16) || *temp < Temp_min){
+  if(*temp > Temp_max || *temp < Temp_min){
     Serial.println(F("Données du capteur de température incohérente."));
     while (1) {
       leds.setColorRGB(0, 255, 0, 0);
@@ -466,6 +469,17 @@ void desactiver_capteur(){
 	PRESSURE(0);
 }
 
+//Tableaux pour reconnaître les commandes en mode config
+typedef void (*Commandes)(int);
+
+const char* const nom_commandes[] PROGMEM = {"LOG_INTERVALL=", "FILE_MAX_SIZE=", "RESET", "VERSION", "TIMEOUT=", "LUMIN=", "LUMIN_LOW=", "LUMIN_HIGH=",
+    "TEMP_AIR=", "MIN_TEMP_AIR=", "MAX_TEMP_AIR=", "HYGR=", "HYGR_MINT=", "HYGR_MAXT=", "PRESSURE=", "PRESSURE_MIN=", "PRESSURE_MAX=", "CLOCK=", "DATE="};
+
+const int8_t num_commandes[] PROGMEM = {14, 14, 5, 6, 8, 6, 10, 11, 9, 13, 13, 5, 10, 10, 9, 13, 13, 6, 5};
+
+const Commandes commandes[] PROGMEM = {LOG_INTERVALL, FILE_MAX_SIZE, RESET, VERSION, TIMEOUT, LUMIN, LUMIN_LOW, LUMIN_HIGH,
+    TEMP_AIR, MIN_TEMP_AIR, MAX_TEMP_AIR, HYGR, HYGR_MINT, HYGR_MAXT, PRESSURE, PRESSURE_MIN, PRESSURE_MAX};
+
 void configurer_parametres(String command){
   command.trim();
   const char* commande = command.c_str();
@@ -495,6 +509,22 @@ void configurer_parametres(String command){
 int transformation(const char* commande){
   const char* valeur = strtok(commande, "=");
 	valeur = strtok(NULL, "=");
+  return atoi(valeur);
+}
+
+int t1(const char* commande, int index){
+  const char* valeur = strtok(commande, "=");
+  for (int i=0; i<index; i++){
+    valeur = strtok(NULL, ":");
+  }
+  return atoi(valeur);
+}
+
+int t2(const char* commande, int index){
+  const char* valeur = strtok(commande, "=");
+  for (int i=0; i<index; i++){
+    valeur = strtok(NULL, "/");
+  }
   return atoi(valeur);
 }
 
