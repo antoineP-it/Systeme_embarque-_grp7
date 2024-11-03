@@ -11,7 +11,7 @@ void mode_maintenance(){
 
     // Arrêt de l'écriture, vous pouvez consulter les données de la carte
     if (SD.begin(chipSelect)) { // Vérifiez si la carte SD est initialisée
-        File dataFile = SD.open("Save.txt");
+        File dataFile = SD.open("Save.txt", FILE_READ);
         if (dataFile) {
             Serial.println(F("Arrêt de l'écriture, vous pouvez consulter les données de la carte"));
             while (dataFile.available()) {
